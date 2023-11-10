@@ -109,15 +109,27 @@ async function axiosPostURLEncoded(site, body, reqCookies, referer = null) {
     return req;
 }
 
+function getRedirectLocation(req) {
+    if (!req.headers.location) {
+        throw new Error("No redirect location!");
+    }
+    return req.headers.location;
+}
+
+function buildRequestUrlFromRequestAndPath(oldRequest, path) {
+    var parsed = new URL(oldRequest.config.url);
+    return new URL(parsed.origin + path);
+}
+
 async function logIn(samlURL, username, password) {
     var reqCookies = {};
     var req3 = logRequest(await axiosGet(samlURL, reqCookies), 3) // get uci shib login url from page we are logging in to
 
-    var req4 = logRequest(await axiosGet(req3.headers.location, reqCookies, req3.config.url), 4); // shib - /idp/profile/SAML2/Redirect/SSO?SAMLRequest=
+    var req4 = logRequest(await axiosGet(getRedirectLocation(req3), reqCookies, req3.config.url), 4); // shib - /idp/profile/SAML2/Redirect/SSO?SAMLRequest=
 
-    var req5_url = (new URL((new URL(req4.config.url)).origin + req4.headers.location)).href;
+    var req5_url = buildRequestUrlFromRequestAndPath(req4, getRedirectLocation(req4)).href;
     var req5 = logRequest(await axiosGet(req5_url, reqCookies, req4.config.url), 5); // shib - /idp/profile/SAML2/Redirect/SSO;jsessionid=?execution=
-    var req6_parse = new JSDOM(req5.data);
+    var req5_parse = new JSDOM(req5.data);
 
     // req6 (5's load) validates that session and persistence of sessions are working
     //var req6_url = req5.config.url; //to same as req5 (but should be taken from a form named "form1" on the page
@@ -133,7 +145,7 @@ async function logIn(samlURL, username, password) {
     req6_body.set('_eventId_proceed', '');
     var req6 = logRequest(await axiosPostURLEncoded(req6_url, req6_body, reqCookies, req5.config.url), 6) // shib - POST after JS
 
-    var req7_url = (new URL((new URL(req6.config.url)).origin + req6.headers.location)).href;
+    var req7_url = buildRequestUrlFromRequestAndPath(req6, getRedirectLocation(req6)).href;
     var req7 = logRequest(await axiosGet(req7_url, reqCookies, req6.config.url), 7); // shib - load login page
 
     var req8_url = req7.config.url;
@@ -148,8 +160,7 @@ async function logIn(samlURL, username, password) {
     req8_body.set('_eventId_proceed', 'Logging in');
     var req8 = logRequest(await axiosPostURLEncoded(req8_url, req8_body, reqCookies, req7.config.url), 8); // post login data
 
-
-    var req9_url = (new URL((new URL(req8.config.url)).origin + req8.headers.location)).href;
+    var req9_url = buildRequestUrlFromRequestAndPath(req8, getRedirectLocation(req8)).href;
     var req9 = logRequest(await axiosGet(req9_url, reqCookies, req8.config.url), 9); // gets to duo here
     var req9_parse = new JSDOM(req9.data);
     var req9_duoelement = req9_parse.window.document.getElementsByClassName("duo-wrapper")[0].outerHTML;
@@ -164,7 +175,7 @@ async function resumeLogIn(url, sig_response, reqCookies) {
     req10_body.set('sig_response', sig_response);
     var req10 = logRequest(await axiosPostURLEncoded(url, req10_body, reqCookies, url), 10);
 
-    var req11_url = (new URL((new URL(req10.config.url)).origin + req10.headers.location)).href;
+    var req11_url = buildRequestUrlFromRequestAndPath(req10, getRedirectLocation(req10)).href;
     var req11 = logRequest(await axiosGet(req11_url, reqCookies, req10.config.url), 11);
 
     var req12_url = req11_url; // get from form with attr name=form1
