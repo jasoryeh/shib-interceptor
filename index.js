@@ -140,7 +140,7 @@ async function followUntil200(url, reqCookies, i = 1, previous = null) {
 
 async function logIn(samlURL, username, password) {
     var reqCookies = {};
-    
+
     var req5 = await followUntil200(samlURL, reqCookies, 0);
     var req5_parse = new JSDOM(req5.data);
 
@@ -243,7 +243,7 @@ app.get('/', async(req, res) => {
                     <label for="pass">Password</label><br>
                     <input type="text" id="pass" name="pass"><br>
                     <label for="callback">Callback</label><br>
-                    <input type="text" id="calback" name="callback" value="/callback"><br><br>
+                    <input type="text" id="calback" name="callback" value="/callback_interactive"><br><br>
                     <input type="submit" value="Submit">
                 </form>
             </div>
@@ -348,6 +348,56 @@ app.post('/callback', async (req, res) => {
     debug("CALLBACK DATA", rawjson);
     res.set('Content-Type', 'application/json');
     return res.send(rawjson);
+});
+
+
+app.post('/callback_interactive', async (req, res) => {
+    var raw = req.body.auth_data;
+    debug("CALLBACK RAW", req.body);
+    var rawbuffer = Buffer.from(raw, 'base64');
+    var rawjson = JSON.parse(rawbuffer.toString());
+    debug("CALLBACK DATA", rawjson);
+    res.set('Content-Type', 'text/html');
+    var body = `
+    <html>
+        <head>
+            <title>Shibboleth Interceptor - Interactive Callback</title>
+            <style>
+                html {
+                    font-family: Calibri, sans-serif;
+                }
+                label {
+                    font-weight: bold;
+                }
+                input {
+                    padding: 10px;
+                    margin-bottom: 1rem;
+                    margin-top: 0.25rem;
+                    width: 100%;
+                }
+                #form {
+                    width: 50%;
+                    margin: auto;
+                    margin-top: 10vh;
+                }
+                textarea {
+                    width: 100%;
+                    height: 50vh;
+                }
+            </style>
+        </head>
+        <body>
+            <div id="form">
+                <h1>Callback:</h1>
+                <textarea>${JSON.stringify(rawjson, null, 4)}</textarea>
+                <div id="form">
+                    ${rawjson.response.replace("</form>", "<input type=\"submit\" value=\"Continue\"/></form>")}
+                </div>
+            </div>
+        </body>
+    </html>
+    `;
+    return res.send(body);
 });
 
 const PORT = process.env.PORT ?? 1234;
