@@ -23,3 +23,34 @@ POST `/idp/profile/SAML2/Redirect/SSO*`
 
 POST `/callback`
 * Test endpoint to see callback data.
+
+POST `/callback_interactive`
+* Test endpoint to see callback data and submit it to destination.
+
+# Creating your application
+1. Identify the Login endpoint that will 3xx until reaching SSO.
+2. Authenticate users by logging them in via `/login` with their username, password, url of the login endpoint, and your callback URL.
+3. When users complete, your application will receive data at the callback URL.
+```json
+{
+    "response": "raw html element with shib auth keys and data here",
+    "extracted": {
+        "main": {
+            "name": "SAMLResponse",
+            "value": "..."
+        },
+        "fields": [
+            {
+                "tag": "input",
+                "name": "other-attributes",
+                "value": "etc..."
+            },
+            {
+                "expect": "expect incomplete fields, this is a primitive extraction of the data from the response from SSO",
+                "data is usually in": "objects with 'tag': 'input'",
+                "typically": "all that's really needed is the SAMLResponse"
+            },
+        ]
+    }
+}
+```
