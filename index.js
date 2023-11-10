@@ -184,7 +184,48 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.get('/', async(req, res) => {
-    return res.send("oh");
+    var page = `
+    <html>
+        <head>
+            <title>Shibboleth Interceptor</title>
+            <style>
+                html {
+                    font-family: Calibri, sans-serif;
+                }
+                label {
+                    font-weight: bold;
+                }
+                input {
+                    padding: 10px;
+                    margin-bottom: 1rem;
+                    margin-top: 0.25rem;
+                    width: 100%;
+                }
+                #form {
+                    width: 50%;
+                    margin: auto;
+                    margin-top: 10vh;
+                }
+            </style>
+        </head>
+        <body>
+            <div id="form">
+                <h1>Test Shibboleth Interceptor</h1>
+                <form action="/login" method="POST">
+                    <label for="url">URL</label><br>
+                    <input type="text" id="url" name="url" value="https://canvas.eee.uci.edu/login/saml"><br>
+                    <label for="user">Username</label><br>
+                    <input type="text" id="user" name="user"><br>
+                    <label for="pass">Password</label><br>
+                    <input type="text" id="pass" name="pass"><br>
+                    <label for="callback">Callback</label><br>
+                    <input type="text" id="calback" name="callback" value="/callback"><br><br>
+                    <input type="submit" value="Submit">
+                </form>
+            </div>
+        </body>
+    </html>`;
+    return res.send(page);
 });
 
 async function handleLogIn(url, user, pass, callback, req, res) {
