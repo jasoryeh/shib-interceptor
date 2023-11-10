@@ -5,8 +5,8 @@ const app = express();
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 
-function logRequest(req, i = 0) {
-    console.log(`Request ${i}: ${req.config.method} ${req.config.url} | ${req.status} ${req.statusText}`);
+function logRequest(req, i = 0, auto = false) {
+    console.log(`${auto ? "[AUTO] " : ""}Request ${i}: ${req.config.method} ${req.config.url} | ${req.status} ${req.statusText}`);
     return req;
 }
 
@@ -121,14 +121,27 @@ function buildRequestUrlFromRequestAndPath(oldRequest, path) {
     return new URL(parsed.origin + path);
 }
 
+async function followUntil200(url, reqCookies, i = 1, previous = null) {
+    var reqx = logRequest(await axiosGet(url, reqCookies, previous), i, true);
+    if (reqx.status >= 200 && reqx.status <= 299) {
+        console.log("End redirect chain @ " + url);
+        return reqx;
+    }
+    if (reqx.status < 300 || reqx.status > 399) {
+        throw new Error("Could not resolve to 200 at page: " + reqx.config.url);
+    }
+    var redirTo = getRedirectLocation(reqx);
+    if (redirTo.startsWith("/")) {
+        redirTo = buildRequestUrlFromRequestAndPath(reqx, redirTo).href;
+    }
+    console.log("Redirecting to: " + redirTo);
+    return await followUntil200(redirTo, reqCookies, i + 1, url);
+}
+
 async function logIn(samlURL, username, password) {
     var reqCookies = {};
-    var req3 = logRequest(await axiosGet(samlURL, reqCookies), 3) // get uci shib login url from page we are logging in to
-
-    var req4 = logRequest(await axiosGet(getRedirectLocation(req3), reqCookies, req3.config.url), 4); // shib - /idp/profile/SAML2/Redirect/SSO?SAMLRequest=
-
-    var req5_url = buildRequestUrlFromRequestAndPath(req4, getRedirectLocation(req4)).href;
-    var req5 = logRequest(await axiosGet(req5_url, reqCookies, req4.config.url), 5); // shib - /idp/profile/SAML2/Redirect/SSO;jsessionid=?execution=
+    
+    var req5 = await followUntil200(samlURL, reqCookies, 0);
     var req5_parse = new JSDOM(req5.data);
 
     // req6 (5's load) validates that session and persistence of sessions are working
