@@ -111,7 +111,7 @@ async function axiosPostURLEncoded(site, body, reqCookies, referer = null) {
 
 function getRedirectLocation(req) {
     if (!req.headers.location) {
-        throw new Error("No redirect location!");
+        throw new Error(`No redirect location from ${req.config.url} - ${req.status} - <textarea>${req.data.replace('"', '&quote;')}</textarea>`);
     }
     return req.headers.location;
 }
@@ -143,19 +143,49 @@ async function logIn(samlURL, username, password) {
 
     var req5 = await followUntil200(samlURL, reqCookies, 0);
     var req5_parse = new JSDOM(req5.data);
+    var req5_parsed_form = req5_parse.window.document.querySelector(`[name=${"form1"}]`);
 
     // req6 (5's load) validates that session and persistence of sessions are working
     //var req6_url = req5.config.url; //to same as req5 (but should be taken from a form named "form1" on the page
-    var req6_url = req5.config.url;
+    var req6_url = req5_parsed_form.hasAttribute("action") ? req5_parsed_form.getAttribute("action") : req5.config.url;
+    if (req6_url.startsWith('/')) {
+        req6_url = buildRequestUrlFromRequestAndPath(req5, req6_url).href;
+    }
+    if (!req6_url.includes("uci.edu")) {
+        throw new Error("Could not log in! Did not get a shibboleth page! Got " + req6_url + " instead.");
+    }
+    if (!req5_parsed_form.hasAttribute("method")) {
+        throw new Error("Could not verify form submission method!");
+    }
+    if (req5_parsed_form.getAttribute("method").toLowerCase() != "post") {
+        throw new Error("Form method is not a POST request!");
+    }
     var req6_body = new URLSearchParams();
+    for (let elem of req5_parsed_form.children) {
+        if (elem.tagName !== "INPUT") { // identify inputs for post request
+            continue;
+        }
+        if (!elem.hasAttribute("name")) {
+            continue;
+        }
+        var attrName = elem.getAttribute("name");
+        var attrValue = elem.hasAttribute("value") ? elem.getAttribute("value") : "";
+        // mark session, persistence, and local storage values as true
+        if (attrName.includes("_supported") || (attrName.includes("success.") && attrValue.toLowerCase() === "false")) { // mark localstorage flags as true to fake localstorage
+            attrValue = true;
+        }
+        req6_body.set(attrName, attrValue);
+    }
+    /* // Expected attributes:
     req6_body.set('shib_idp_ls_exception.shib_idp_session_ss', '');
-    req6_body.set('shib_idp_ls_success.shib_idp_session_ss', 'true');
+    req6_body.set('shib_idp_ls_success.shib_idp_session_ss', 'true'); // default false, changed in js on load
     req6_body.set('shib_idp_ls_value.shib_idp_session_ss', '');
     req6_body.set('shib_idp_ls_exception.shib_idp_persistent_ss', '');
     req6_body.set('shib_idp_ls_success.shib_idp_persistent_ss', 'true');
-    req6_body.set('shib_idp_ls_value.shib_idp_persistent_ss', '');
+    req6_body.set('shib_idp_ls_value.shib_idp_persistent_ss', ''); // default false, changed in js on load
     req6_body.set('shib_idp_ls_supported', 'true');
     req6_body.set('_eventId_proceed', '');
+    */
     var req6 = logRequest(await axiosPostURLEncoded(req6_url, req6_body, reqCookies, req5.config.url), 6) // shib - POST after JS
 
     var req7_url = buildRequestUrlFromRequestAndPath(req6, getRedirectLocation(req6)).href;
@@ -168,17 +198,17 @@ async function logIn(samlURL, username, password) {
     req8_body.set('info_text', '');
     req8_body.set('info_url', '');
     req8_body.set('submit_type', '');
-    req8_body.set('j_username', username);
-    req8_body.set('j_password', password);
+    req8_body.set('j_username', username); // username
+    req8_body.set('j_password', password); // password
     req8_body.set('_eventId_proceed', 'Logging in');
     var req8 = logRequest(await axiosPostURLEncoded(req8_url, req8_body, reqCookies, req7.config.url), 8); // post login data
 
     var req9_url = buildRequestUrlFromRequestAndPath(req8, getRedirectLocation(req8)).href;
     var req9 = logRequest(await axiosGet(req9_url, reqCookies, req8.config.url), 9); // gets to duo here
-    var req9_parse = new JSDOM(req9.data);
-    var req9_duoelement = req9_parse.window.document.getElementsByClassName("duo-wrapper")[0].outerHTML;
-    req9_duoelement = req9_duoelement.replaceAll("=\"/", "=\"" + (new URL(req9.config.url)).origin + "/");
-    req9_duoelement = req9_duoelement.replaceAll("data-post-action=\"" + (new URL(req9.config.url)).origin, "data-post-action=\"");
+    var req9_parse = new JSDOM(req9.data); // parse page
+    var req9_duoelement = req9_parse.window.document.getElementsByClassName("duo-wrapper")[0].outerHTML; // extract duo wrapper
+    req9_duoelement = req9_duoelement.replaceAll("=\"/", "=\"" + (new URL(req9.config.url)).origin + "/"); // replace relative-to-auth-page links
+    req9_duoelement = req9_duoelement.replaceAll("data-post-action=\"" + (new URL(req9.config.url)).origin, "data-post-action=\""); // replace callback to ourselves
     return [req9_duoelement, req9.config.url, reqCookies];
 }
 
@@ -186,20 +216,20 @@ async function resumeLogIn(url, sig_response, reqCookies) {
     var req10_body = new URLSearchParams();
     req10_body.set('_eventId', 'proceed');
     req10_body.set('sig_response', sig_response);
-    var req10 = logRequest(await axiosPostURLEncoded(url, req10_body, reqCookies, url), 10);
+    var req10 = logRequest(await axiosPostURLEncoded(url, req10_body, reqCookies, url), 10); // post Duo auth code
 
     var req11_url = buildRequestUrlFromRequestAndPath(req10, getRedirectLocation(req10)).href;
-    var req11 = logRequest(await axiosGet(req11_url, reqCookies, req10.config.url), 11);
+    var req11 = logRequest(await axiosGet(req11_url, reqCookies, req10.config.url), 11); // follow redirect to session saving page
 
     var req12_url = req11_url; // get from form with attr name=form1
     var req12_body = new URLSearchParams();
     req12_body.set("shib_idp_ls_exception.shib_idp_session_ss", "");
     req12_body.set("shib_idp_ls_success.shib_idp_session_ss", "true");
     req12_body.set("_eventId_proceed", "");
-    var req12 = logRequest(await axiosPostURLEncoded(req12_url, req12_body, reqCookies, req11.config.url), 12);
+    var req12 = logRequest(await axiosPostURLEncoded(req12_url, req12_body, reqCookies, req11.config.url), 12); // post session saved
 
     var req12_parse = new JSDOM(req12.data);
-    var req12_form = req12_parse.window.document.querySelector('form').outerHTML;
+    var req12_form = req12_parse.window.document.querySelector('form').outerHTML; // get login form
     return req12_form;
 }
 
@@ -237,13 +267,13 @@ app.get('/', async(req, res) => {
                 <h1>Test Shibboleth Interceptor</h1>
                 <form action="/login" method="POST">
                     <label for="url">URL</label><br>
-                    <input type="text" id="url" name="url" value="https://canvas.eee.uci.edu/login/saml"><br>
+                    <input type="text" id="url" name="url" value="${req.query.url ?? "https://canvas.eee.uci.edu/login/saml"}"><br>
                     <label for="user">Username</label><br>
                     <input type="text" id="user" name="user"><br>
                     <label for="pass">Password</label><br>
                     <input type="text" id="pass" name="pass"><br>
                     <label for="callback">Callback</label><br>
-                    <input type="text" id="calback" name="callback" value="/callback_interactive"><br><br>
+                    <input type="text" id="calback" name="callback" value="${req.query.callback ?? "/callback_interactive"}"><br><br>
                     <input type="submit" value="Submit">
                 </form>
             </div>
@@ -257,13 +287,19 @@ async function handleLogIn(url, user, pass, callback, req, res) {
     if (!url || !user || !pass || !callback || !req || !res) {
         return res.send("Need a callback, url, user, pass!");
     }
-    let authing = await logIn(url, user, pass);
+    var authing = null;
+    try {
+        authing = await logIn(url, user, pass);
+    } catch(error) {
+        console.error(error);
+        return res.send("Failed to authenticate: " + error.message);
+    }
     res.cookie('saml-callback-to', callback)
     res.cookie('saml-memory', authing[1]);
     var cookies_wrap = JSON.stringify(authing[2]);
     res.cookie('saml-cookies', cookies_wrap);
     debug("DUO ELEMENT", authing[0]);
-    return res.send(authing[0]);
+    return res.send(authing[0] + "<style>#duo_iframe { width: 100%; }</style>");
 }
 
 app.get('/login', async (req, res) => {
@@ -302,7 +338,13 @@ app.post('/idp/profile/SAML2/Redirect/SSO*', async (req, res) => {
     }
 
     var reqCookies = JSON.parse(req.cookies['saml-cookies']);
-    let authdone = await resumeLogIn(saml_url, req.body.sig_response, reqCookies);
+    var authdone = null;
+    try {
+        authdone = await resumeLogIn(saml_url, req.body.sig_response, reqCookies);
+    } catch(error) {
+        console.error(error);
+        return res.send("Failed to finish authenticating: " + error.message);
+    }
     debug("AUTH COMPLETE", authdone);
 
     res.cookie('saml-sig', JSON.stringify(req.body));
