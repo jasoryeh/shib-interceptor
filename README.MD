@@ -1,8 +1,13 @@
 # Shibboleth Intercept
-Authenticates with the UCI Shibboleth IDP programmatically with interactive DUO 2FA security support to authenticate and access information on other affiliated websites behind SSO authentication pages.
+(See below, no longer functional) Authenticates with the UCI Shibboleth IDP programmatically with interactive DUO 2FA security support to authenticate and access information on other affiliated websites behind SSO authentication pages.
+
+## Future endeavours
+No longer functional, UCI has moved to redirecting the user to Duo to finalize 2FA instead of an embedded page/iFrame, further work on this requires either REing the Duo page to simulate it's requests, follow the auth-flow on the server-side and forwarding the prompts to the user.
 
 ## Purpose
-For developing applications that require authentication with a SSO provider to develop applications using data from several sources behind 2FA.
+For developing applications that require authentication with the SSO provider at UCI to develop applications using data from several sources behind 2FA.
+
+This project is not meant to evade or hide any security features and does not remove the requirement of 2FA. The user is still prompted with the iFrame that is usually presented on the login page, and this tool only facilitates the retrieval of the authentication token that is usually forwarded to the service the user is accessing. 
 
 ## TODO:
 Handle errors.
